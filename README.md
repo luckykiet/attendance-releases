@@ -98,6 +98,42 @@ invisibly for as long as nobody looks.
 Re-running `--publish` on an existing tag uploads into it, so a release is
 legitimately finished in two passes — one per build machine.
 
+## Signing
+
+`latest.txt` decides, unattended and at SYSTEM privilege, which installer a kiosk
+runs tonight. Serving it over HTTPS proves it came from GitHub; it proves nothing
+about whether GitHub was told to serve it by us — a stolen token or a compromised
+account would be enough to publish a release every terminal then installs.
+
+So a release may carry a detached signature, `latest.txt.sig`: base64 of a
+`SHA256withRSA` signature over the manifest's bytes. This is the same shape apt
+and dnf have always used — signed metadata carrying digests, rather than signing
+every artifact.
+
+Both halves of a kiosk check it independently: the app before it downloads
+anything, and the privileged helper again before it installs, against a
+certificate pinned at install time. **A terminal built with a publisher
+certificate refuses an unsigned manifest**, so once signing starts it cannot
+quietly stop.
+
+```bash
+./release.sh --new-key            # once, ever
+export AVIZA_UPDATE_KEY=~/.aviza-update-key.pem
+./release.sh --publish            # signs and attaches latest.txt.sig
+```
+
+Verifying one by hand:
+
+```bash
+openssl base64 -d -A -in latest.txt.sig -out sig.bin
+openssl dgst -sha256 -verify pub.pem -signature sig.bin latest.txt
+```
+
+This is **not** Authenticode. Signing the `.msi` itself is a separate, also
+worthwhile thing — it is what removes SmartScreen's warning from a manual
+install — and it needs a commercial certificate. This needs a key anybody can
+generate, and it closes the larger hole.
+
 ## Verifying a download by hand
 
 ```bash
